@@ -14,7 +14,6 @@ padding:20px;
 
 .card{
 background:rgba(255,255,255,0.1);
-backdrop-filter:blur(15px);
 padding:15px;
 border-radius:15px;
 margin-bottom:15px;
@@ -53,17 +52,14 @@ border-radius:8px;
 <button onclick="login()">Login</button>
 </div>
 
-<div id="app" style="display:none">
-
-<div class="card">
+<div id="app" class="card" style="display:none">
 <h2>📋 My Tasks</h2>
+
 <input id="taskInput" placeholder="Task">
 <button onclick="addTask()">Add</button>
 <button onclick="logout()">Logout</button>
-</div>
 
 <div id="tasks"></div>
-
 </div>
 
 <script type="module">
@@ -83,61 +79,75 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-let userId=null;
+let userId = null;
 
-/* AUTH */
-onAuthStateChanged(auth,user=>{
-if(user){
-userId=user.uid;
-document.getElementById("auth").style.display="none";
-document.getElementById("app").style.display="block";
-loadTasks();
-}
+const authDiv = document.getElementById("auth");
+const appDiv = document.getElementById("app");
+const tasksDiv = document.getElementById("tasks");
+
+/* AUTH STATE */
+onAuthStateChanged(auth, user => {
+  if(user){
+    userId = user.uid;
+
+    authDiv.style.display = "none";
+    appDiv.style.display = "block";
+
+    loadTasks();
+  } else {
+    authDiv.style.display = "block";
+    appDiv.style.display = "none";
+  }
 });
 
-/* FUNCTIONS */
-window.signup=()=>{
-createUserWithEmailAndPassword(auth,email.value,password.value)
-.then(()=>alert("Signup success"))
-.catch(e=>alert(e.message));
+/* SIGNUP */
+window.signup = () => {
+  createUserWithEmailAndPassword(auth, email.value, password.value)
+    .then(() => alert("Signup success"))
+    .catch(e => alert(e.message));
 };
 
-window.login=()=>{
-signInWithEmailAndPassword(auth,email.value,password.value)
-.then(()=>alert("Login success"))
-.catch(e=>alert(e.message));
+/* LOGIN */
+window.login = () => {
+  signInWithEmailAndPassword(auth, email.value, password.value)
+    .then(() => alert("Login success"))
+    .catch(e => alert(e.message));
 };
 
-window.logout=()=>{signOut(auth);location.reload();};
+/* LOGOUT */
+window.logout = () => {
+  signOut(auth);
+};
 
-/* LOAD */
+/* LOAD TASKS */
 async function loadTasks(){
-let ref=doc(db,"tasks",userId);
-let snap=await getDoc(ref);
+  let ref = doc(db,"tasks",userId);
+  let snap = await getDoc(ref);
 
-let list=snap.data()?.list||[];
+  let list = snap.data()?.list || [];
 
-tasks.innerHTML="";
-list.forEach(t=>{
-tasks.innerHTML+=`<div class="task">${t}</div>`;
-});
+  tasksDiv.innerHTML = "";
+
+  list.forEach(t=>{
+    tasksDiv.innerHTML += `<div class="task">${t}</div>`;
+  });
 }
 
-/* ADD */
-window.addTask=async()=>{
-let text=taskInput.value.trim();
-if(!text)return;
+/* ADD TASK */
+window.addTask = async () => {
+  let text = taskInput.value.trim();
+  if(!text) return;
 
-let ref=doc(db,"tasks",userId);
-let snap=await getDoc(ref);
+  let ref = doc(db,"tasks",userId);
+  let snap = await getDoc(ref);
 
-let list=snap.data()?.list||[];
-list.push(text);
+  let list = snap.data()?.list || [];
+  list.push(text);
 
-await setDoc(ref,{list});
+  await setDoc(ref,{list});
 
-taskInput.value="";
-loadTasks();
+  taskInput.value = "";
+  loadTasks();
 };
 </script>
 
