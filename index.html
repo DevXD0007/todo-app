@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>To Do List</title>
+
+<style>
+:root{
+--bg:#0f2027;
+--bg2:#2c5364;
+--glass:rgba(255,255,255,0.08);
+--text:white;
+--accent:#4facfe;
+}
+
+.light{
+--bg:#f5f7fa;
+--bg2:#ffffff;
+--glass:rgba(255,255,255,0.6);
+--text:#222;
+}
+
+body{
+margin:0;
+font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+background:linear-gradient(135deg,var(--bg),var(--bg2));
+color:var(--text);
+padding:15px;
+}
+
+.card{
+background:var(--glass);
+backdrop-filter:blur(18px);
+border-radius:20px;
+padding:15px;
+margin-bottom:15px;
+}
+
+/* HEADER */
+.header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+/* BUTTON */
+button{
+background:var(--accent);
+border:none;
+color:white;
+padding:8px 12px;
+border-radius:10px;
+cursor:pointer;
+}
+
+/* TASK */
+.task{
+padding:10px;
+margin:6px 0;
+border-radius:10px;
+background:rgba(255,255,255,0.1);
+display:flex;
+justify-content:space-between;
+}
+
+/* CALENDAR */
+.calendar{
+display:grid;
+grid-template-columns:repeat(7,1fr);
+gap:6px;
+}
+
+.day{
+padding:10px;
+text-align:center;
+border-radius:8px;
+cursor:pointer;
+background:rgba(255,255,255,0.05);
+}
+
+.day.active{background:var(--accent);}
+.day.done{border:2px solid #4caf50;}
+
+/* HEATMAP */
+.heatmap{
+display:grid;
+grid-template-columns:repeat(18,1fr);
+gap:4px;
+}
+
+.hm{
+width:100%;
+padding-top:100%;
+border-radius:4px;
+}
+
+.l0{background:#eee;}
+.l1{background:#9be9a8;}
+.l2{background:#40c463;}
+.l3{background:#30a14e;}
+.l4{background:#216e39;}
+
+/* WEEK */
+.week{
+display:grid;
+grid-template-columns:repeat(7,1fr);
+gap:6px;
+}
+
+.wday{
+background:rgba(255,255,255,0.05);
+padding:6px;
+border-radius:8px;
+font-size:12px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="auth" class="card">
+<h3>Login</h3>
+<input id="email" placeholder="Email">
+<input id="password" type="password">
+<button onclick="signup()">Sign Up</button>
+<button onclick="login()">Login</button>
+</div>
+
+<div id="app" style="display:none">
+
+<div class="card">
+<div class="header">
+<h2>📋 To Do List</h2>
+<div>
+<button onclick="toggleTheme()">🌓</button>
+<button onclick="logout()">Logout</button>
+</div>
+</div>
+
+<input id="taskInput" placeholder="Add task">
+<button onclick="addTask()">Add</button>
+
+<div id="stats"></div>
+</div>
+
+<!-- MONTH NAV -->
+<div class="card">
+<div class="header">
+<button onclick="changeMonth(-1)">◀</button>
+<h3 id="monthTitle"></h3>
+<button onclick="changeMonth(1)">▶</button>
+</div>
+
+<div id="calendar" class="calendar"></div>
+</div>
+
+<!-- WEEK VIEW -->
+<div class="card">
+<h3>This Week</h3>
+<div id="week" class="week"></div>
+</div>
+
+<!-- HEATMAP -->
+<div class="card">
+<h3>Activity Heatmap</h3>
+<div id="heatmap" class="heatmap"></div>
+</div>
+
+<div id="tasks"></div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig={
+apiKey:"AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
+authDomain:"todo-app-b2da0.firebaseapp.com",
+projectId:"todo-app-b2da0"
+};
+
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getFirestore(app);
+
+let userId=null;
+let data={};
+let current=new Date();
+
+onAuthStateChanged(auth,user=>{
+if(user){
+userId=user.uid;
+authDiv.style.display="none";
+appDiv.style.display="block";
+load();
+}
+});
+
+window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value);
+window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
+window.logout=()=>signOut(auth);
+
+/* LOAD */
+async function load(){
+let snap=await getDoc(doc(db,"tasks",userId));
+data=snap.data()?.dates||{};
+renderAll();
+}
+
+/* MAIN RENDER */
+function renderAll(){
+renderCalendar();
+renderTasks();
+renderWeek();
+renderHeatmap();
+updateStats();
+}
+
+/* CALENDAR */
+function renderCalendar(){
+calendar.innerHTML="";
+let y=current.getFullYear();
+let m=current.getMonth();
+
+monthTitle.innerText=current.toLocaleString("default",{month:"long",year:"numeric"});
+
+let first=new Date(y,m,1).getDay();
+let days=new Date(y,m+1,0).getDate();
+
+for(let i=0;i<first;i++) calendar.innerHTML+="<div></div>";
+
+for(let d=1;d<=days;d++){
+let date=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+let div=document.createElement("div");
+div.className="day";
+
+if(data[date]?.some(t=>t.done)) div.classList.add("done");
+
+div.innerText=d;
+div.onclick=()=>{
+selected=date;
+renderTasks();
+};
+
+calendar.appendChild(div);
+}
+}
+
+/* TASK */
+let selected=new Date().toISOString().slice(0,10);
+
+function renderTasks(){
+let list=data[selected]||[];
+tasksDiv.innerHTML="";
+
+list.forEach((t,i)=>{
+tasksDiv.innerHTML+=`
+<div class="task">
+<div><input type="checkbox" ${t.done?"checked":""} onchange="toggleTask(${i})"> ${t.text}</div>
+<button onclick="deleteTask(${i})">❌</button>
+</div>`;
+});
+}
+
+/* WEEK */
+function renderWeek(){
+week.innerHTML="";
+let d=new Date();
+
+for(let i=0;i<7;i++){
+let day=new Date();
+day.setDate(d.getDate()-i);
+let key=day.toISOString().slice(0,10);
+
+week.innerHTML+=`
+<div class="wday">
+${key.slice(5)}<br>
+${(data[key]||[]).length} tasks
+</div>`;
+}
+}
+
+/* HEATMAP */
+function renderHeatmap(){
+heatmap.innerHTML="";
+let today=new Date();
+
+for(let i=0;i<90;i++){
+let d=new Date();
+d.setDate(today.getDate()-i);
+let key=d.toISOString().slice(0,10);
+
+let count=(data[key]||[]).filter(t=>t.done).length;
+
+let level=count===0?0:count<2?1:count<4?2:count<6?3:4;
+
+heatmap.innerHTML+=`<div class="hm l${level}"></div>`;
+}
+}
+
+/* STATS */
+function updateStats(){
+let streak=0;
+let d=new Date();
+
+for(let i=0;i<365;i++){
+let key=new Date(d.setDate(d.getDate()-1)).toISOString().slice(0,10);
+if(data[key]?.some(t=>t.done)) streak++;
+else break;
+}
+
+stats.innerText="🔥 Streak: "+streak;
+}
+
+/* ACTIONS */
+window.addTask=async()=>{
+let text=taskInput.value.trim();
+if(!text)return;
+
+if(!data[selected]) data[selected]=[];
+data[selected].push({text,done:false});
+
+await save();
+renderAll();
+taskInput.value="";
+};
+
+window.toggleTask=async(i)=>{
+data[selected][i].done=!data[selected][i].done;
+await save();
+renderAll();
+};
+
+window.deleteTask=async(i)=>{
+data[selected].splice(i,1);
+await save();
+renderAll();
+};
+
+async function save(){
+await setDoc(doc(db,"tasks",userId),{dates:data});
+}
+
+/* MONTH */
+window.changeMonth=(x)=>{
+current.setMonth(current.getMonth()+x);
+renderCalendar();
+};
+
+/* THEME */
+window.toggleTheme=()=>{
+document.body.classList.toggle("light");
+};
+
+/* DOM */
+const authDiv=document.getElementById("auth");
+const appDiv=document.getElementById("app");
+const tasksDiv=document.getElementById("tasks");
+const calendar=document.getElementById("calendar");
+const monthTitle=document.getElementById("monthTitle");
+const week=document.getElementById("week");
+const heatmap=document.getElementById("heatmap");
+const stats=document.getElementById("stats");
+</script>
+
+</body>
+</html>
