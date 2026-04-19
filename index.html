@@ -2,37 +2,41 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
 <title>To Do Pro+</title>
 
 <style>
 body{
-font-family:sans-serif;
+margin:0;
+font-family:-apple-system, BlinkMacSystemFont, sans-serif;
 background:linear-gradient(135deg,#0f2027,#2c5364);
 color:white;
-padding:20px;
+padding:15px;
 }
 
 /* GLASS */
 .card{
 background:rgba(255,255,255,0.08);
-backdrop-filter:blur(18px);
-border:1px solid rgba(255,255,255,0.2);
-border-radius:15px;
+backdrop-filter:blur(20px);
+border-radius:20px;
 padding:15px;
 margin-bottom:15px;
+box-shadow:0 8px 30px rgba(0,0,0,0.3);
 }
 
+/* INPUT */
 input,button{
-padding:10px;
-margin:5px;
 border:none;
-border-radius:10px;
+border-radius:12px;
+padding:12px;
+margin:5px;
+font-size:14px;
 }
 
 button{
-cursor:pointer;
 background:#4facfe;
 color:white;
+cursor:pointer;
 }
 
 /* TASK */
@@ -40,10 +44,11 @@ color:white;
 display:flex;
 align-items:center;
 justify-content:space-between;
-padding:10px;
-margin:6px 0;
-border-radius:10px;
+padding:12px;
+margin:8px 0;
+border-radius:14px;
 background:rgba(255,255,255,0.1);
+cursor:grab;
 }
 
 .task.completed{
@@ -53,9 +58,9 @@ opacity:0.6;
 
 .stats{
 display:flex;
-gap:20px;
+justify-content:space-between;
+font-size:13px;
 margin-top:10px;
-font-size:14px;
 }
 </style>
 </head>
@@ -63,7 +68,7 @@ font-size:14px;
 <body>
 
 <div id="auth" class="card">
-<h3>Login / Signup</h3>
+<h3>Login</h3>
 <input id="email" placeholder="Email">
 <input id="password" type="password" placeholder="Password">
 <br>
@@ -76,19 +81,26 @@ font-size:14px;
 <div class="card">
 <h2>📋 My Tasks</h2>
 
-<input id="taskInput" placeholder="Task">
+<input id="taskInput" placeholder="Add task">
 <button onclick="addTask()">Add</button>
 <button onclick="logout()">Logout</button>
 
 <div class="stats">
-<div id="total">Total: 0</div>
-<div id="completed">Done: 0</div>
+<div id="total"></div>
+<div id="completed"></div>
+<div id="streak"></div>
 </div>
+</div>
+
+<div class="card">
+<canvas id="chart" height="100"></canvas>
 </div>
 
 <div id="tasks"></div>
 
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -110,48 +122,41 @@ const db = getFirestore(app);
 let userId=null;
 let currentTasks=[];
 
-const authDiv=document.getElementById("auth");
-const appDiv=document.getElementById("app");
 const tasksDiv=document.getElementById("tasks");
 
 /* AUTH */
 onAuthStateChanged(auth,user=>{
 if(user){
 userId=user.uid;
-authDiv.style.display="none";
-appDiv.style.display="block";
+auth.style.display="none";
+app.style.display="block";
 loadTasks();
-}else{
-authDiv.style.display="block";
-appDiv.style.display="none";
 }
 });
 
-/* AUTH FUNCTIONS */
+/* AUTH */
 window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value);
 window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
 window.logout=()=>signOut(auth);
 
-/* LOAD + AUTO FIX OLD DATA */
+/* LOAD */
 async function loadTasks(){
 let ref=doc(db,"tasks",userId);
 let snap=await getDoc(ref);
 
 let list=snap.data()?.list||[];
 
-// 🔥 AUTO CONVERT OLD DATA
+/* FIX OLD DATA */
 currentTasks=list.map(t=>{
-if(typeof t==="string"){
-return {text:t,done:false};
-}
+if(typeof t==="string") return {text:t,done:false};
 return t;
 });
 
-// SAVE FIXED DATA BACK
 await setDoc(ref,{list:currentTasks});
 
 render();
 updateStats();
+updateChart();
 }
 
 /* RENDER */
@@ -161,6 +166,7 @@ tasksDiv.innerHTML="";
 currentTasks.forEach((t,i)=>{
 let div=document.createElement("div");
 div.className="task"+(t.done?" completed":"");
+div.draggable=true;
 
 div.innerHTML=`
 <div>
@@ -171,11 +177,45 @@ ${t.text}
 `;
 
 tasksDiv.appendChild(div);
+
+/* DRAG */
+div.addEventListener("dragstart",()=>div.classList.add("dragging"));
+div.addEventListener("dragend",()=>{
+div.classList.remove("dragging");
+saveOrder();
+});
 });
 
-if(currentTasks.length===0){
-tasksDiv.innerHTML="<div>No tasks yet ✨</div>";
+tasksDiv.addEventListener("dragover",e=>{
+e.preventDefault();
+const dragging=document.querySelector(".dragging");
+const after=getAfter(e.clientY);
+if(after==null) tasksDiv.appendChild(dragging);
+else tasksDiv.insertBefore(dragging,after);
+});
 }
+
+/* DRAG HELPER */
+function getAfter(y){
+const els=[...tasksDiv.querySelectorAll(".task:not(.dragging)")];
+return els.reduce((closest,child)=>{
+const box=child.getBoundingClientRect();
+const offset=y-box.top-box.height/2;
+if(offset<0 && offset>closest.offset){
+return{offset,element:child};
+}else return closest;
+},{offset:-999}).element;
+}
+
+/* SAVE ORDER */
+async function saveOrder(){
+currentTasks=[...tasksDiv.children].map(el=>{
+return{
+text:el.innerText,
+done:el.querySelector("input").checked
+};
+});
+await setDoc(doc(db,"tasks",userId),{list:currentTasks});
 }
 
 /* ADD */
@@ -184,7 +224,6 @@ let text=taskInput.value.trim();
 if(!text)return;
 
 currentTasks.push({text,done:false});
-
 await setDoc(doc(db,"tasks",userId),{list:currentTasks});
 
 taskInput.value="";
@@ -194,28 +233,46 @@ loadTasks();
 /* TOGGLE */
 window.toggleTask=async(i)=>{
 currentTasks[i].done=!currentTasks[i].done;
-
 await setDoc(doc(db,"tasks",userId),{list:currentTasks});
-
 loadTasks();
 };
 
 /* DELETE */
 window.deleteTask=async(i)=>{
 currentTasks.splice(i,1);
-
 await setDoc(doc(db,"tasks",userId),{list:currentTasks});
-
 loadTasks();
 };
 
-/* STATS */
+/* STATS + STREAK */
 function updateStats(){
 let total=currentTasks.length;
 let done=currentTasks.filter(t=>t.done).length;
 
 document.getElementById("total").innerText="Total: "+total;
 document.getElementById("completed").innerText="Done: "+done;
+
+/* SIMPLE STREAK */
+let streak=localStorage.getItem("streak")||0;
+if(total>0) streak++;
+else streak=0;
+
+localStorage.setItem("streak",streak);
+document.getElementById("streak").innerText="🔥 "+streak;
+}
+
+/* CHART */
+function updateChart(){
+let done=currentTasks.filter(t=>t.done).length;
+new Chart(document.getElementById("chart"),{
+type:"doughnut",
+data:{
+labels:["Done","Pending"],
+datasets:[{
+data:[done,currentTasks.length-done]
+}]
+}
+});
 }
 </script>
 
