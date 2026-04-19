@@ -5,76 +5,25 @@
 <title>To Do Pro</title>
 
 <style>
-:root{
---bg1:#0f2027;
---bg2:#2c5364;
---glass:rgba(255,255,255,0.08);
---text:white;
-}
-
-.light{
---bg1:#e3f2fd;
---bg2:#ffffff;
---glass:rgba(255,255,255,0.6);
---text:#222;
-}
-
 body{
 font-family:sans-serif;
-background:linear-gradient(135deg,var(--bg1),var(--bg2));
-color:var(--text);
+background:#0f2027;
+color:white;
 padding:20px;
-transition:0.3s;
 }
-
 .card{
-background:var(--glass);
-backdrop-filter:blur(18px);
-border:1px solid rgba(255,255,255,0.2);
-border-radius:15px;
+background:rgba(255,255,255,0.1);
 padding:15px;
+border-radius:10px;
 margin-bottom:15px;
 }
-
 input,button{
 padding:10px;
 margin:5px;
 border:none;
-border-radius:10px;
+border-radius:8px;
 }
-
-button{
-cursor:pointer;
-background:#4facfe;
-color:white;
-}
-
-.task{
-display:flex;
-align-items:center;
-gap:10px;
-padding:10px;
-margin:6px 0;
-border-radius:10px;
-background:rgba(255,255,255,0.1);
-}
-
-.task.completed{
-text-decoration:line-through;
-opacity:0.6;
-}
-
-.stats{
-display:flex;
-justify-content:space-between;
-font-size:14px;
-margin-top:10px;
-}
-
-.toggle{
-float:right;
-cursor:pointer;
-}
+button{cursor:pointer;background:#4facfe;color:white;}
 </style>
 </head>
 
@@ -93,19 +42,11 @@ cursor:pointer;
 <div id="app" style="display:none">
 
 <div class="card">
-<h2>📋 To Do Pro
-<span class="toggle" onclick="toggleTheme()">🌙</span>
-</h2>
-
+<h2>📋 To Do</h2>
 <input type="date" id="date">
 <input id="taskInput" placeholder="Task">
 <button onclick="addTask()">Add</button>
 <button onclick="logout()">Logout</button>
-
-<div class="stats">
-<div id="total">Total: 0</div>
-<div id="completed">Done: 0</div>
-</div>
 </div>
 
 <div id="tasks"></div>
@@ -113,11 +54,11 @@ cursor:pointer;
 </div>
 
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } 
-from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc } 
-from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
@@ -130,18 +71,15 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 let userId=null;
-let currentTasks=[];
 
 /* AUTH */
 onAuthStateChanged(auth,user=>{
 if(user){
 userId=user.uid;
-
 authDiv.style.display="none";
-app.style.display="block";
+appDiv.style.display="block";
 
 date.value=new Date().toISOString().split("T")[0];
-
 loadTasks();
 }
 });
@@ -164,35 +102,15 @@ window.logout=()=>{signOut(auth);location.reload();};
 
 /* LOAD */
 async function loadTasks(){
-let d=date.value;
-let ref=doc(db,"tasks",userId,"dates",d);
+let ref=doc(db,"tasks",userId,"dates",date.value);
 let snap=await getDoc(ref);
 
-currentTasks=snap.data()?.list||[];
+let list=snap.data()?.list||[];
 
-render();
-updateStats();
-}
-
-/* RENDER */
-function render(){
 tasks.innerHTML="";
-
-currentTasks.forEach((t,i)=>{
-let div=document.createElement("div");
-div.className="task"+(t.done?" completed":"");
-
-div.innerHTML=`
-<input type="checkbox" ${t.done?"checked":""} onchange="toggleTask(${i})">
-<span>${t.text}</span>
-`;
-
-tasks.appendChild(div);
+list.forEach(t=>{
+tasks.innerHTML+=`<div class="card">${t}</div>`;
 });
-
-if(currentTasks.length===0){
-tasks.innerHTML="<div>No tasks yet ✨</div>";
-}
 }
 
 /* ADD */
@@ -200,47 +118,25 @@ window.addTask=async()=>{
 let text=taskInput.value.trim();
 if(!text)return;
 
-currentTasks.push({text,done:false});
+let ref=doc(db,"tasks",userId,"dates",date.value);
+let snap=await getDoc(ref);
 
-await setDoc(doc(db,"tasks",userId,"dates",date.value),{list:currentTasks});
+let list=snap.data()?.list||[];
+list.push(text);
+
+await setDoc(ref,{list});
 
 taskInput.value="";
 loadTasks();
 };
 
-/* TOGGLE */
-window.toggleTask=async(i)=>{
-currentTasks[i].done=!currentTasks[i].done;
-
-await setDoc(doc(db,"tasks",userId,"dates",date.value),{list:currentTasks});
-
-loadTasks();
-};
-
-/* STATS */
-function updateStats(){
-let total=currentTasks.length;
-let done=currentTasks.filter(t=>t.done).length;
-
-totalEl.innerText="Total: "+total;
-completedEl.innerText="Done: "+done;
-}
-
-/* THEME */
-window.toggleTheme=()=>{
-document.body.classList.toggle("light");
-};
-
-/* EVENTS */
 date.onchange=loadTasks;
 
-/* FIX DOM refs */
+/* DOM refs */
 const authDiv=document.getElementById("auth");
-const app=document.getElementById("app");
+const appDiv=document.getElementById("app");
 const tasks=document.getElementById("tasks");
 const error=document.getElementById("error");
-const totalEl=document.getElementById("total");
-const completedEl=document.getElementById("completed");
 </script>
 
 </body>
