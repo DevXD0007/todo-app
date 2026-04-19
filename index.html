@@ -132,12 +132,23 @@ window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value
 window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
 window.logout=()=>signOut(auth);
 
-/* LOAD */
+/* LOAD + AUTO FIX OLD DATA */
 async function loadTasks(){
 let ref=doc(db,"tasks",userId);
 let snap=await getDoc(ref);
 
-currentTasks=snap.data()?.list||[];
+let list=snap.data()?.list||[];
+
+// 🔥 AUTO CONVERT OLD DATA
+currentTasks=list.map(t=>{
+if(typeof t==="string"){
+return {text:t,done:false};
+}
+return t;
+});
+
+// SAVE FIXED DATA BACK
+await setDoc(ref,{list:currentTasks});
 
 render();
 updateStats();
