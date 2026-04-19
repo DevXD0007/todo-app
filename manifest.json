@@ -1,15 +1,25 @@
 {
-  "name": "To Do List",
-  "short_name": "Tasks",
-  "start_url": "index.html",
+  "name": "To Do Pro",
+  "short_name": "ToDo",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#0f2027",
   "theme_color": "#4facfe",
+  "description": "A modern cloud-synced to-do app with streaks and analytics.",
   "icons": [
     {
-      "src": "icon.png",
+      "src": "icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
