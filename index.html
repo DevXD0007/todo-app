@@ -38,23 +38,6 @@ padding:15px;
 margin-bottom:15px;
 }
 
-/* HEADER */
-.header{
-display:flex;
-justify-content:space-between;
-align-items:center;
-}
-
-/* BUTTON */
-button{
-background:var(--accent);
-border:none;
-color:white;
-padding:8px 12px;
-border-radius:10px;
-cursor:pointer;
-}
-
 /* TASK */
 .task{
 padding:12px;
@@ -63,15 +46,25 @@ border-radius:12px;
 background:rgba(255,255,255,0.1);
 display:flex;
 justify-content:space-between;
-align-items:center;
 cursor:grab;
-transition:transform 0.2s, box-shadow 0.2s;
+transition:transform 0.2s ease;
 }
 
-.task.dragging{
-opacity:0.7;
-transform:scale(1.05);
-box-shadow:0 10px 30px rgba(0,0,0,0.4);
+.task:active{
+transform:scale(0.97);
+}
+
+/* GHOST */
+.ghost{
+position:fixed;
+pointer-events:none;
+padding:12px;
+background:rgba(255,255,255,0.15);
+backdrop-filter:blur(10px);
+border-radius:12px;
+box-shadow:0 15px 40px rgba(0,0,0,0.4);
+transform:translate(-50%,-50%);
+z-index:999;
 }
 
 /* CALENDAR */
@@ -79,14 +72,12 @@ box-shadow:0 10px 30px rgba(0,0,0,0.4);
 display:grid;
 grid-template-columns:repeat(7,1fr);
 gap:8px;
-touch-action:pan-y;
 }
 
 .day{
 padding:12px;
 border-radius:12px;
 text-align:center;
-cursor:pointer;
 background:rgba(255,255,255,0.05);
 transition:0.2s;
 }
@@ -124,35 +115,25 @@ font-size:12px;
 <div id="app" style="display:none">
 
 <div class="card">
-<div class="header">
 <h2>📋 To Do List</h2>
-<div>
 <button onclick="toggleTheme()">🌓</button>
 <button onclick="logout()">Logout</button>
-</div>
-</div>
 
 <input id="taskInput" placeholder="Add task">
 <button onclick="addTask()">Add</button>
-
 <div id="stats"></div>
 </div>
 
-<!-- CALENDAR -->
 <div class="card">
-<div class="header">
 <button onclick="changeMonth(-1)">◀</button>
-<h3 id="monthTitle"></h3>
+<span id="monthTitle"></span>
 <button onclick="changeMonth(1)">▶</button>
-</div>
 
 <div id="calendar" class="calendar"></div>
 </div>
 
-<!-- TASKS -->
 <div id="tasks"></div>
 
-<!-- WEEK -->
 <div class="card">
 <h3>This Week</h3>
 <div id="week" class="week"></div>
@@ -162,35 +143,36 @@ font-size:12px;
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import {
-getAuth,
-createUserWithEmailAndPassword,
-signInWithEmailAndPassword,
-onAuthStateChanged,
-signOut
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import {
-getFirestore,
-doc,
-getDoc,
-setDoc
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+/* FIREBASE */
 const firebaseConfig = {
 apiKey:"AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
 authDomain:"todo-app-b2da0.firebaseapp.com",
 projectId:"todo-app-b2da0"
 };
 
-const app=initializeApp(firebaseConfig);
-const auth=getAuth(app);
-const db=getFirestore(app);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
+/* DOM FIRST (FIXED ERROR) */
+const authDiv = document.getElementById("auth");
+const appDiv = document.getElementById("app");
+const tasksDiv = document.getElementById("tasks");
+const calendar = document.getElementById("calendar");
+const monthTitle = document.getElementById("monthTitle");
+const week = document.getElementById("week");
+const stats = document.getElementById("stats");
+
+/* STATE */
 let userId=null;
 let data={};
 let current=new Date();
 let selected=new Date().toISOString().slice(0,10);
 let dragIndex=null;
+let ghost=null;
 
 /* AUTH */
 onAuthStateChanged(auth,user=>{
@@ -201,6 +183,10 @@ appDiv.style.display="block";
 load();
 }
 });
+
+window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value);
+window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
+window.logout=()=>signOut(auth);
 
 /* LOAD */
 async function load(){
@@ -233,16 +219,13 @@ div.className="day";
 div.innerText=d;
 
 if(date===selected) div.classList.add("active");
-if(data[date]?.some(t=>t.done)) div.classList.add("done");
 
 div.onclick=()=>{selected=date;renderAll();};
 
 /* DROP */
-div.ondragover=e=>{e.preventDefault();div.classList.add("drop");};
-div.ondragleave=()=>div.classList.remove("drop");
-div.ondrop=async()=>{
-moveTask(date);
-};
+div.ontouchend=()=>{if(dragIndex!==null) moveTask(date)};
+div.ondragover=e=>e.preventDefault();
+div.ondrop=()=>moveTask(date);
 
 calendar.appendChild(div);
 }
@@ -258,13 +241,19 @@ let div=document.createElement("div");
 div.className="task";
 div.draggable=true;
 
-div.ondragstart=()=>{
+/* DRAG START */
+div.ondragstart=(e)=>{
 dragIndex=i;
-div.classList.add("dragging");
+createGhost(t.text,e);
 };
 
-div.ondragend=()=>{
-div.classList.remove("dragging");
+/* DRAG END */
+div.ondragend=removeGhost;
+
+/* MOBILE */
+div.ontouchstart=(e)=>{
+dragIndex=i;
+createGhost(t.text,e.touches[0]);
 };
 
 div.innerHTML=`
@@ -279,6 +268,35 @@ tasksDiv.appendChild(div);
 });
 }
 
+/* GHOST */
+function createGhost(text,e){
+ghost=document.createElement("div");
+ghost.className="ghost";
+ghost.innerText=text;
+document.body.appendChild(ghost);
+
+moveGhost(e);
+
+document.onmousemove=moveGhost;
+document.ontouchmove=(ev)=>moveGhost(ev.touches[0]);
+}
+
+function moveGhost(e){
+if(ghost){
+ghost.style.left=e.clientX+"px";
+ghost.style.top=e.clientY+"px";
+}
+}
+
+function removeGhost(){
+if(ghost){
+ghost.remove();
+ghost=null;
+}
+document.onmousemove=null;
+document.ontouchmove=null;
+}
+
 /* MOVE */
 async function moveTask(newDate){
 let task=data[selected][dragIndex];
@@ -288,6 +306,12 @@ if(!data[newDate]) data[newDate]=[];
 data[newDate].push(task);
 
 selected=newDate;
+removeGhost();
+
+/* SPRING ANIMATION */
+tasksDiv.style.transform="scale(0.95)";
+setTimeout(()=>tasksDiv.style.transform="scale(1)",150);
+
 await save();
 renderAll();
 }
@@ -325,11 +349,7 @@ let d=new Date();
 d.setDate(d.getDate()-i);
 let key=d.toISOString().slice(0,10);
 
-week.innerHTML+=`
-<div class="wday">
-${key.slice(5)}<br>
-${(data[key]||[]).length}
-</div>`;
+week.innerHTML+=`<div class="wday">${key.slice(5)}<br>${(data[key]||[]).length}</div>`;
 }
 }
 
@@ -349,15 +369,9 @@ stats.innerText="🔥 Streak: "+streak;
 
 /* SWIPE */
 let startX=0;
-
-calendar.addEventListener("touchstart",e=>{
-startX=e.touches[0].clientX;
-});
-
+calendar.addEventListener("touchstart",e=>startX=e.touches[0].clientX);
 calendar.addEventListener("touchend",e=>{
-let endX=e.changedTouches[0].clientX;
-let diff=endX-startX;
-
+let diff=e.changedTouches[0].clientX-startX;
 if(diff>50) changeMonth(-1);
 if(diff<-50) changeMonth(1);
 });
@@ -384,20 +398,6 @@ window.changeMonth=(x)=>{
 current.setMonth(current.getMonth()+x);
 renderCalendar();
 };
-
-/* AUTH */
-window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value);
-window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
-window.logout=()=>signOut(auth);
-
-/* DOM */
-const authDiv=document.getElementById("auth");
-const appDiv=document.getElementById("app");
-const tasksDiv=document.getElementById("tasks");
-const calendar=document.getElementById("calendar");
-const monthTitle=document.getElementById("monthTitle");
-const week=document.getElementById("week");
-const stats=document.getElementById("stats");
 </script>
 
 </body>
