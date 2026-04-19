@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>To Do List</title>
+
+<link rel="manifest" href="manifest.json">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{
+font-family:sans-serif;
+background:linear-gradient(135deg,#0f2027,#2c5364,#4facfe);
+color:white;
+padding:20px;
+}
+.glass{
+background:rgba(255,255,255,0.1);
+backdrop-filter:blur(15px);
+border-radius:15px;
+padding:15px;
+margin-bottom:15px;
+}
+button,input{
+padding:10px;
+border:none;
+border-radius:10px;
+margin:5px;
+}
+button{cursor:pointer;background:rgba(255,255,255,0.2);color:white;}
+.task{display:flex;justify-content:space-between;margin:5px 0;}
+.completed{text-decoration:line-through;opacity:0.6;}
+</style>
+</head>
+
+<body>
+
+<div class="glass">
+<h2>📋 To Do List</h2>
+
+<input type="date" id="date">
+<input type="text" id="taskInput" placeholder="Task...">
+<button onclick="addTask()">Add</button>
+<button onclick="exportCSV()">⬇ Excel</button>
+</div>
+
+<div id="tasks"></div>
+
+<script>
+let tasks=JSON.parse(localStorage.getItem("tasks"))||{};
+
+document.addEventListener("DOMContentLoaded",()=>{
+let today=new Date().toISOString().split("T")[0];
+date.value=today;
+load();
+});
+
+function save(){
+localStorage.setItem("tasks",JSON.stringify(tasks));
+}
+
+function load(){
+let d=date.value;
+if(!tasks[d])tasks[d]=[];
+
+let html="";
+tasks[d].forEach((t,i)=>{
+html+=`
+<div class="glass task ${t.done?'completed':''}">
+<span onclick="toggle(${i})">${t.text}</span>
+<button onclick="del(${i})">X</button>
+</div>`;
+});
+
+tasks.innerHTML=html;
+}
+
+function addTask(){
+let d=date.value;
+let text=taskInput.value.trim();
+if(!text)return;
+
+if(!tasks[d])tasks[d]=[];
+tasks[d].push({text,done:false});
+
+taskInput.value="";
+save();
+load();
+}
+
+function toggle(i){
+let d=date.value;
+tasks[d][i].done=!tasks[d][i].done;
+save();
+load();
+}
+
+function del(i){
+let d=date.value;
+tasks[d].splice(i,1);
+save();
+load();
+}
+
+function exportCSV(){
+let rows=[["Date","Task","Done"]];
+Object.keys(tasks).forEach(d=>{
+tasks[d].forEach(t=>{
+rows.push([d,t.text,t.done?"Yes":"No"]);
+});
+});
+let csv=rows.map(r=>r.join(",")).join("\n");
+let blob=new Blob([csv],{type:"text/csv"});
+let a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="tasks.csv";
+a.click();
+}
+
+/* SERVICE WORKER */
+if('serviceWorker' in navigator){
+navigator.serviceWorker.register('service-worker.js');
+}
+</script>
+
+</body>
+</html>
