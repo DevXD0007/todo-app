@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>To Do List</title>
+
+<style>
+:root{
+--bg:#0f2027;
+--bg2:#2c5364;
+--glass:rgba(255,255,255,0.08);
+--text:white;
+--accent:#4facfe;
+}
+
+.light{
+--bg:#f5f7fa;
+--bg2:#ffffff;
+--glass:rgba(255,255,255,0.6);
+--text:#222;
+}
+
+body{
+margin:0;
+font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+background:linear-gradient(135deg,var(--bg),var(--bg2));
+color:var(--text);
+padding:15px;
+transition:0.3s;
+}
+
+/* CARD */
+.card{
+background:var(--glass);
+backdrop-filter:blur(20px);
+border-radius:20px;
+padding:15px;
+margin-bottom:15px;
+box-shadow:0 10px 30px rgba(0,0,0,0.25);
+}
+
+/* HEADER */
+.header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+
+/* BUTTON */
+button{
+background:var(--accent);
+border:none;
+color:white;
+padding:10px 14px;
+border-radius:12px;
+cursor:pointer;
+}
+
+/* INPUT */
+input{
+padding:10px;
+border-radius:10px;
+border:none;
+}
+
+/* TASK */
+.task{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:12px;
+margin:6px 0;
+border-radius:14px;
+background:rgba(255,255,255,0.1);
+}
+
+.task.completed{
+opacity:0.6;
+text-decoration:line-through;
+}
+
+/* CALENDAR */
+.calendar{
+display:grid;
+grid-template-columns:repeat(7,1fr);
+gap:8px;
+margin-top:10px;
+}
+
+.day{
+padding:10px;
+text-align:center;
+border-radius:10px;
+cursor:pointer;
+background:rgba(255,255,255,0.05);
+}
+
+.day.active{
+background:var(--accent);
+}
+
+.day.done{
+border:2px solid #4caf50;
+}
+
+.small{
+font-size:12px;
+opacity:0.7;
+}
+</style>
+</head>
+
+<body>
+
+<div id="auth" class="card">
+<h3>Login</h3>
+<input id="email" placeholder="Email">
+<input id="password" type="password">
+<button onclick="signup()">Sign Up</button>
+<button onclick="login()">Login</button>
+</div>
+
+<div id="app" style="display:none">
+
+<div class="card">
+<div class="header">
+<h2>📋 To Do List</h2>
+<div>
+<button onclick="toggleTheme()">🌓</button>
+<button onclick="logout()">Logout</button>
+</div>
+</div>
+
+<input id="taskInput" placeholder="Add task">
+<button onclick="addTask()">Add</button>
+
+<div id="stats" class="small"></div>
+</div>
+
+<div class="card">
+<h3 id="monthTitle"></h3>
+<div id="calendar" class="calendar"></div>
+</div>
+
+<div id="tasks"></div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig={
+apiKey:"AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
+authDomain:"todo-app-b2da0.firebaseapp.com",
+projectId:"todo-app-b2da0"
+};
+
+const app=initializeApp(firebaseConfig);
+const auth=getAuth(app);
+const db=getFirestore(app);
+
+let userId=null;
+let data={};
+let selectedDate=new Date().toISOString().slice(0,10);
+
+/* AUTH */
+onAuthStateChanged(auth,user=>{
+if(user){
+userId=user.uid;
+authDiv.style.display="none";
+appDiv.style.display="block";
+load();
+}
+});
+
+window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value);
+window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
+window.logout=()=>signOut(auth);
+
+/* LOAD */
+async function load(){
+let snap=await getDoc(doc(db,"tasks",userId));
+data=snap.data()?.dates||{};
+renderCalendar();
+renderTasks();
+updateStats();
+}
+
+/* CALENDAR */
+function renderCalendar(){
+calendar.innerHTML="";
+
+let d=new Date(selectedDate);
+let year=d.getFullYear();
+let month=d.getMonth();
+
+monthTitle.innerText=d.toLocaleString("default",{month:"long",year:"numeric"});
+
+let first=new Date(year,month,1).getDay();
+let days=new Date(year,month+1,0).getDate();
+
+for(let i=0;i<first;i++){
+calendar.innerHTML+="<div></div>";
+}
+
+for(let day=1;day<=days;day++){
+let date=`${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+
+let div=document.createElement("div");
+div.className="day";
+
+if(date===selectedDate) div.classList.add("active");
+if(data[date]?.some(t=>t.done)) div.classList.add("done");
+
+div.innerText=day;
+div.onclick=()=>{
+selectedDate=date;
+renderCalendar();
+renderTasks();
+};
+
+calendar.appendChild(div);
+}
+}
+
+/* TASKS */
+function renderTasks(){
+let list=data[selectedDate]||[];
+tasksDiv.innerHTML="";
+
+list.forEach((t,i)=>{
+let div=document.createElement("div");
+div.className="task"+(t.done?" completed":"");
+
+div.innerHTML=`
+<div>
+<input type="checkbox" ${t.done?"checked":""} onchange="toggleTask(${i})">
+${t.text}
+</div>
+<button onclick="deleteTask(${i})">❌</button>
+`;
+
+tasksDiv.appendChild(div);
+});
+
+if(list.length===0){
+tasksDiv.innerHTML="<div class='card'>No tasks ✨</div>";
+}
+}
+
+/* ADD */
+window.addTask=async()=>{
+let text=taskInput.value.trim();
+if(!text)return;
+
+if(!data[selectedDate]) data[selectedDate]=[];
+data[selectedDate].push({text,done:false});
+
+await save();
+taskInput.value="";
+renderTasks();
+renderCalendar();
+updateStats();
+};
+
+/* TOGGLE */
+window.toggleTask=async(i)=>{
+data[selectedDate][i].done=!data[selectedDate][i].done;
+await save();
+renderTasks();
+renderCalendar();
+updateStats();
+};
+
+/* DELETE */
+window.deleteTask=async(i)=>{
+data[selectedDate].splice(i,1);
+await save();
+renderTasks();
+renderCalendar();
+updateStats();
+};
+
+/* SAVE */
+async function save(){
+await setDoc(doc(db,"tasks",userId),{dates:data});
+}
+
+/* STATS + STREAK */
+function updateStats(){
+let streak=0;
+let d=new Date();
+
+for(let i=0;i<365;i++){
+let key=new Date(d.setDate(d.getDate()-1)).toISOString().slice(0,10);
+if(data[key]?.some(t=>t.done)) streak++;
+else break;
+}
+
+stats.innerText="🔥 Streak: "+streak;
+}
+
+/* THEME */
+window.toggleTheme=()=>{
+document.body.classList.toggle("light");
+localStorage.setItem("theme",document.body.classList.contains("light"));
+};
+
+if(localStorage.getItem("theme")==="true"){
+document.body.classList.add("light");
+}
+
+/* DOM */
+const authDiv=document.getElementById("auth");
+const appDiv=document.getElementById("app");
+const tasksDiv=document.getElementById("tasks");
+const calendar=document.getElementById("calendar");
+const monthTitle=document.getElementById("monthTitle");
+const stats=document.getElementById("stats");
+</script>
+
+</body>
+</html>
