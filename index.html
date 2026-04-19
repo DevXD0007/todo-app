@@ -24,11 +24,7 @@ border:none;
 border-radius:8px;
 }
 button{cursor:pointer;}
-.task{
-display:flex;
-justify-content:space-between;
-margin:5px 0;
-}
+.task{margin:5px 0;}
 </style>
 </head>
 
@@ -57,17 +53,13 @@ margin:5px 0;
 
 </div>
 
-<!-- FIREBASE SCRIPT -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
-
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } 
 from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
-
 import { getFirestore, doc, getDoc, setDoc } 
 from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
-/* 🔴 YOUR CONFIG (already correct) */
 const firebaseConfig = {
   apiKey: "AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
   authDomain: "todo-app-b2da0.firebaseapp.com",
@@ -83,7 +75,6 @@ const db = getFirestore(app);
 
 let userId = null;
 
-/* AUTH STATE */
 onAuthStateChanged(auth, user => {
   if(user){
     userId = user.uid;
@@ -98,26 +89,22 @@ onAuthStateChanged(auth, user => {
   }
 });
 
-/* SIGNUP */
 window.signup = function(){
   createUserWithEmailAndPassword(auth, email.value, password.value)
-  .then(()=>alert("Account created!"))
+  .then(()=>alert("Account created"))
   .catch(e=>alert(e.message));
 }
 
-/* LOGIN */
 window.login = function(){
   signInWithEmailAndPassword(auth, email.value, password.value)
   .catch(e=>alert(e.message));
 }
 
-/* LOGOUT */
 window.logout = function(){
   signOut(auth);
   location.reload();
 }
 
-/* LOAD TASKS */
 async function loadTasks(){
   let d = date.value;
 
@@ -126,28 +113,18 @@ async function loadTasks(){
 
   let list = snap.data()?.list || [];
 
-  render(list);
-}
-
-/* RENDER */
-function render(list){
-  let html = "";
-  list.forEach((t,i)=>{
-    html += `
-    <div class="box task">
-      <span>${t}</span>
-    </div>
-    `;
+  let html="";
+  list.forEach(t=>{
+    html += `<div class="box task">${t}</div>`;
   });
 
-  if(list.length === 0){
+  if(list.length===0){
     html = "<div>No tasks yet ✨</div>";
   }
 
   document.getElementById("tasks").innerHTML = html;
 }
 
-/* ADD TASK */
 window.addTask = async function(){
   let d = date.value;
   let text = taskInput.value.trim();
@@ -162,13 +139,11 @@ window.addTask = async function(){
 
   await setDoc(ref,{list});
 
-  taskInput.value = "";
+  taskInput.value="";
   loadTasks();
 }
 
-/* DATE CHANGE */
 document.getElementById("date").addEventListener("change", loadTasks);
-
 </script>
 
 </body>
