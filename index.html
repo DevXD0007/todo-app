@@ -5,38 +5,45 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>To Do List</title>
 
-<link rel="manifest" href="manifest.json">
-
 <style>
-*{margin:0;padding:0;box-sizing:border-box;}
 body{
 font-family:sans-serif;
 background:linear-gradient(135deg,#0f2027,#2c5364,#4facfe);
 color:white;
 padding:20px;
 }
-.glass{
+.box{
 background:rgba(255,255,255,0.1);
-backdrop-filter:blur(15px);
-border-radius:15px;
 padding:15px;
+border-radius:15px;
 margin-bottom:15px;
 }
-button,input{
+input,button{
 padding:10px;
 border:none;
 border-radius:10px;
 margin:5px;
 }
-button{cursor:pointer;background:rgba(255,255,255,0.2);color:white;}
-.task{display:flex;justify-content:space-between;margin:5px 0;}
-.completed{text-decoration:line-through;opacity:0.6;}
+button{
+background:rgba(255,255,255,0.2);
+color:white;
+cursor:pointer;
+}
+.task{
+display:flex;
+justify-content:space-between;
+margin:5px 0;
+}
+.completed{
+text-decoration:line-through;
+opacity:0.6;
+}
 </style>
 </head>
 
 <body>
 
-<div class="glass">
+<div class="box">
 <h2>📋 To Do List</h2>
 
 <input type="date" id="date">
@@ -48,80 +55,102 @@ button{cursor:pointer;background:rgba(255,255,255,0.2);color:white;}
 <div id="tasks"></div>
 
 <script>
-let tasks=JSON.parse(localStorage.getItem("tasks"))||{};
+let tasksData = JSON.parse(localStorage.getItem("tasks")) || {};
 
-document.addEventListener("DOMContentLoaded",()=>{
-let today=new Date().toISOString().split("T")[0];
-date.value=today;
-load();
+// INIT
+document.addEventListener("DOMContentLoaded", () => {
+    let today = new Date().toISOString().split("T")[0];
+    document.getElementById("date").value = today;
+    loadTasks();
 });
 
-function save(){
-localStorage.setItem("tasks",JSON.stringify(tasks));
+// SAVE
+function saveTasks(){
+    localStorage.setItem("tasks", JSON.stringify(tasksData));
 }
 
-function load(){
-let d=date.value;
-if(!tasks[d])tasks[d]=[];
+// LOAD
+function loadTasks(){
+    let d = document.getElementById("date").value;
 
-let html="";
-tasks[d].forEach((t,i)=>{
-html+=`
-<div class="glass task ${t.done?'completed':''}">
-<span onclick="toggle(${i})">${t.text}</span>
-<button onclick="del(${i})">X</button>
-</div>`;
-});
+    if(!tasksData[d]) tasksData[d] = [];
 
-tasks.innerHTML=html;
+    let html = "";
+
+    tasksData[d].forEach((t,i)=>{
+        html += `
+        <div class="box task ${t.done ? 'completed' : ''}">
+            <span onclick="toggleTask(${i})">${t.text}</span>
+            <button onclick="deleteTask(${i})">X</button>
+        </div>
+        `;
+    });
+
+    document.getElementById("tasks").innerHTML = html;
+
+    if(tasksData[d].length === 0){
+        document.getElementById("tasks").innerHTML = "<div>No tasks ✨</div>";
+    }
 }
 
+// ADD
 function addTask(){
-let d=date.value;
-let text=taskInput.value.trim();
-if(!text)return;
+    let d = document.getElementById("date").value;
+    let text = document.getElementById("taskInput").value.trim();
 
-if(!tasks[d])tasks[d]=[];
-tasks[d].push({text,done:false});
+    if(!text) return;
 
-taskInput.value="";
-save();
-load();
+    if(!tasksData[d]) tasksData[d] = [];
+
+    tasksData[d].push({text, done:false});
+
+    document.getElementById("taskInput").value = "";
+
+    saveTasks();
+    loadTasks();
 }
 
-function toggle(i){
-let d=date.value;
-tasks[d][i].done=!tasks[d][i].done;
-save();
-load();
+// TOGGLE
+function toggleTask(i){
+    let d = document.getElementById("date").value;
+
+    tasksData[d][i].done = !tasksData[d][i].done;
+
+    saveTasks();
+    loadTasks();
 }
 
-function del(i){
-let d=date.value;
-tasks[d].splice(i,1);
-save();
-load();
+// DELETE
+function deleteTask(i){
+    let d = document.getElementById("date").value;
+
+    tasksData[d].splice(i,1);
+
+    saveTasks();
+    loadTasks();
 }
 
+// EXPORT
 function exportCSV(){
-let rows=[["Date","Task","Done"]];
-Object.keys(tasks).forEach(d=>{
-tasks[d].forEach(t=>{
-rows.push([d,t.text,t.done?"Yes":"No"]);
-});
-});
-let csv=rows.map(r=>r.join(",")).join("\n");
-let blob=new Blob([csv],{type:"text/csv"});
-let a=document.createElement("a");
-a.href=URL.createObjectURL(blob);
-a.download="tasks.csv";
-a.click();
+    let rows = [["Date","Task","Done"]];
+
+    Object.keys(tasksData).forEach(d=>{
+        tasksData[d].forEach(t=>{
+            rows.push([d, t.text, t.done ? "Yes":"No"]);
+        });
+    });
+
+    let csv = rows.map(r=>r.join(",")).join("\n");
+
+    let blob = new Blob([csv], {type:"text/csv"});
+    let a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "tasks.csv";
+    a.click();
 }
 
-/* SERVICE WORKER */
-if('serviceWorker' in navigator){
-navigator.serviceWorker.register('service-worker.js');
-}
+// CHANGE DATE
+document.getElementById("date").addEventListener("change", loadTasks);
 </script>
 
 </body>
