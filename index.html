@@ -2,35 +2,61 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>To Do List</title>
+<title>To Do Pro</title>
 
 <style>
 body{
 font-family:sans-serif;
-background:#0f2027;
+background:linear-gradient(135deg,#0f2027,#2c5364);
 color:white;
 padding:20px;
 }
-.box{
+
+.card{
 background:#1e2a38;
 padding:15px;
-border-radius:10px;
-margin-bottom:15px;
+border-radius:12px;
+margin-bottom:12px;
+box-shadow:0 4px 10px rgba(0,0,0,0.3);
 }
+
 input,button{
 padding:10px;
 margin:5px;
 border:none;
 border-radius:8px;
 }
-button{cursor:pointer;}
-.task{margin:5px 0;}
+
+button{
+cursor:pointer;
+background:#4facfe;
+color:white;
+}
+
+.task{
+display:flex;
+justify-content:space-between;
+padding:10px;
+margin:6px 0;
+background:#243447;
+border-radius:8px;
+cursor:grab;
+}
+
+.task.dragging{
+opacity:0.5;
+}
+
+.streak{
+font-size:14px;
+color:#00e676;
+}
 </style>
 </head>
 
 <body>
 
-<div id="auth" class="box">
+<div id="auth" class="card">
 <h3>Login / Signup</h3>
 <input id="email" placeholder="Email">
 <input id="password" type="password" placeholder="Password">
@@ -41,8 +67,11 @@ button{cursor:pointer;}
 
 <div id="app" style="display:none">
 
-<div class="box">
-<h2>📋 To Do List</h2>
+<div class="card">
+<h2>📋 To Do Pro</h2>
+
+<div class="streak" id="streak">🔥 Streak: 0 days</div>
+
 <input type="date" id="date">
 <input id="taskInput" placeholder="Task">
 <button onclick="addTask()">Add</button>
@@ -64,86 +93,131 @@ const firebaseConfig = {
   apiKey: "AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
   authDomain: "todo-app-b2da0.firebaseapp.com",
   projectId: "todo-app-b2da0",
-  storageBucket: "todo-app-b2da0.firebasestorage.app",
-  messagingSenderId: "152976873140",
-  appId: "1:152976873140:web:7ae0c71cafc1fc67f469e1"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-let userId = null;
+let userId=null;
+let currentTasks=[];
 
-onAuthStateChanged(auth, user => {
-  if(user){
-    userId = user.uid;
+/* AUTH */
+onAuthStateChanged(auth,user=>{
+if(user){
+userId=user.uid;
 
-    document.getElementById("auth").style.display="none";
-    document.getElementById("app").style.display="block";
+authDiv.style.display="none";
+app.style.display="block";
 
-    document.getElementById("date").value =
-    new Date().toISOString().split("T")[0];
+date.value=new Date().toISOString().split("T")[0];
 
-    loadTasks();
-  }
+loadTasks();
+updateStreak();
+}
 });
 
-window.signup = function(){
-  createUserWithEmailAndPassword(auth, email.value, password.value)
-  .then(()=>alert("Account created"))
-  .catch(e=>alert(e.message));
-}
+/* AUTH FUNCTIONS */
+window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value);
+window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
+window.logout=()=>{signOut(auth);location.reload();};
 
-window.login = function(){
-  signInWithEmailAndPassword(auth, email.value, password.value)
-  .catch(e=>alert(e.message));
-}
-
-window.logout = function(){
-  signOut(auth);
-  location.reload();
-}
-
+/* LOAD TASKS */
 async function loadTasks(){
-  let d = date.value;
+let d=date.value;
+let ref=doc(db,"tasks",userId,"dates",d);
+let snap=await getDoc(ref);
 
-  let ref = doc(db,"tasks",userId,"dates",d);
-  let snap = await getDoc(ref);
+currentTasks=snap.data()?.list||[];
 
-  let list = snap.data()?.list || [];
-
-  let html="";
-  list.forEach(t=>{
-    html += `<div class="box task">${t}</div>`;
-  });
-
-  if(list.length===0){
-    html = "<div>No tasks yet ✨</div>";
-  }
-
-  document.getElementById("tasks").innerHTML = html;
+render();
 }
 
-window.addTask = async function(){
-  let d = date.value;
-  let text = taskInput.value.trim();
-  if(!text) return;
+/* RENDER */
+function render(){
+tasks.innerHTML="";
 
-  let ref = doc(db,"tasks",userId,"dates",d);
-  let snap = await getDoc(ref);
+currentTasks.forEach((t,i)=>{
+let div=document.createElement("div");
+div.className="task";
+div.draggable=true;
+div.innerText=t;
 
-  let list = snap.data()?.list || [];
+div.addEventListener("dragstart",()=>div.classList.add("dragging"));
+div.addEventListener("dragend",()=>{
+div.classList.remove("dragging");
+saveOrder();
+});
 
-  list.push(text);
+tasks.appendChild(div);
+});
 
-  await setDoc(ref,{list});
-
-  taskInput.value="";
-  loadTasks();
+tasks.addEventListener("dragover",e=>{
+e.preventDefault();
+const dragging=document.querySelector(".dragging");
+const after=getAfter(tasks,e.clientY);
+if(after==null) tasks.appendChild(dragging);
+else tasks.insertBefore(dragging,after);
+});
 }
 
-document.getElementById("date").addEventListener("change", loadTasks);
+/* DRAG LOGIC */
+function getAfter(container,y){
+const els=[...container.querySelectorAll(".task:not(.dragging)")];
+return els.reduce((closest,child)=>{
+const box=child.getBoundingClientRect();
+const offset=y-box.top-box.height/2;
+if(offset<0 && offset>closest.offset){
+return{offset,element:child};
+}else return closest;
+},{offset:-999}).element;
+}
+
+/* SAVE ORDER */
+async function saveOrder(){
+let newList=[...tasks.children].map(el=>el.innerText);
+currentTasks=newList;
+
+await setDoc(doc(db,"tasks",userId,"dates",date.value),{list:newList});
+}
+
+/* ADD TASK */
+window.addTask=async()=>{
+let text=taskInput.value.trim();
+if(!text)return;
+
+currentTasks.push(text);
+
+await setDoc(doc(db,"tasks",userId,"dates",date.value),{list:currentTasks});
+
+taskInput.value="";
+loadTasks();
+updateStreak();
+};
+
+/* STREAK */
+async function updateStreak(){
+let streakCount=0;
+let today=new Date();
+
+for(let i=0;i<30;i++){
+let d=new Date();
+d.setDate(today.getDate()-i);
+let key=d.toISOString().split("T")[0];
+
+let snap=await getDoc(doc(db,"tasks",userId,"dates",key));
+
+if(snap.exists() && snap.data().list.length>0){
+streakCount++;
+}else break;
+}
+
+streak.innerText=`🔥 Streak: ${streakCount} days`;
+}
+
+/* EVENTS */
+date.onchange=loadTasks;
+
 </script>
 
 </body>
