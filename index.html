@@ -24,7 +24,11 @@ border:none;
 border-radius:8px;
 }
 button{cursor:pointer;}
-.task{display:flex;justify-content:space-between;margin:5px 0;}
+.task{
+display:flex;
+justify-content:space-between;
+margin:5px 0;
+}
 </style>
 </head>
 
@@ -53,121 +57,118 @@ button{cursor:pointer;}
 
 </div>
 
-<!-- Firebase -->
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
-
-<script>
-// 🔴 PASTE YOUR FIREBASE CONFIG HERE
+<!-- FIREBASE SCRIPT -->
 <script type="module">
-  // Import the functions you need from the SDKs you need
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
-  // TODO: Add SDKs for Firebase products that you want to use
-  // https://firebase.google.com/docs/web/setup#available-libraries
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
 
-  // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
-    authDomain: "todo-app-b2da0.firebaseapp.com",
-    projectId: "todo-app-b2da0",
-    storageBucket: "todo-app-b2da0.firebasestorage.app",
-    messagingSenderId: "152976873140",
-    appId: "1:152976873140:web:7ae0c71cafc1fc67f469e1"
-  };
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } 
+from "https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js";
 
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-</script>
+import { getFirestore, doc, getDoc, setDoc } 
+from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 
-firebase.initializeApp(firebaseConfig);
+/* 🔴 YOUR CONFIG (already correct) */
+const firebaseConfig = {
+  apiKey: "AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
+  authDomain: "todo-app-b2da0.firebaseapp.com",
+  projectId: "todo-app-b2da0",
+  storageBucket: "todo-app-b2da0.firebasestorage.app",
+  messagingSenderId: "152976873140",
+  appId: "1:152976873140:web:7ae0c71cafc1fc67f469e1"
+};
 
-const auth = firebase.auth();
-const db = firebase.firestore();
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 let userId = null;
 
-// AUTH STATE
-auth.onAuthStateChanged(user=>{
-if(user){
-userId = user.uid;
-document.getElementById("auth").style.display="none";
-document.getElementById("app").style.display="block";
+/* AUTH STATE */
+onAuthStateChanged(auth, user => {
+  if(user){
+    userId = user.uid;
 
-document.getElementById("date").value =
-new Date().toISOString().split("T")[0];
+    document.getElementById("auth").style.display="none";
+    document.getElementById("app").style.display="block";
 
-loadTasks();
-}
+    document.getElementById("date").value =
+    new Date().toISOString().split("T")[0];
+
+    loadTasks();
+  }
 });
 
-// SIGNUP
-function signup(){
-auth.createUserWithEmailAndPassword(email.value,password.value);
+/* SIGNUP */
+window.signup = function(){
+  createUserWithEmailAndPassword(auth, email.value, password.value)
+  .then(()=>alert("Account created!"))
+  .catch(e=>alert(e.message));
 }
 
-// LOGIN
-function login(){
-auth.signInWithEmailAndPassword(email.value,password.value);
+/* LOGIN */
+window.login = function(){
+  signInWithEmailAndPassword(auth, email.value, password.value)
+  .catch(e=>alert(e.message));
 }
 
-// LOGOUT
-function logout(){
-auth.signOut();
-location.reload();
+/* LOGOUT */
+window.logout = function(){
+  signOut(auth);
+  location.reload();
 }
 
-// LOAD
+/* LOAD TASKS */
 async function loadTasks(){
-let d=date.value;
+  let d = date.value;
 
-let snap=await db.collection("tasks")
-.doc(userId)
-.collection("dates")
-.doc(d)
-.get();
+  let ref = doc(db,"tasks",userId,"dates",d);
+  let snap = await getDoc(ref);
 
-let data=snap.data()?.list || [];
+  let list = snap.data()?.list || [];
 
-render(data);
+  render(list);
 }
 
-// RENDER
+/* RENDER */
 function render(list){
-let html="";
-list.forEach((t,i)=>{
-html+=`
-<div class="box task">
-<span>${t}</span>
-</div>`;
-});
-tasks.innerHTML=html;
+  let html = "";
+  list.forEach((t,i)=>{
+    html += `
+    <div class="box task">
+      <span>${t}</span>
+    </div>
+    `;
+  });
+
+  if(list.length === 0){
+    html = "<div>No tasks yet ✨</div>";
+  }
+
+  document.getElementById("tasks").innerHTML = html;
 }
 
-// ADD
-async function addTask(){
-let d=date.value;
-let text=taskInput.value.trim();
-if(!text)return;
+/* ADD TASK */
+window.addTask = async function(){
+  let d = date.value;
+  let text = taskInput.value.trim();
+  if(!text) return;
 
-let ref=db.collection("tasks")
-.doc(userId)
-.collection("dates")
-.doc(d);
+  let ref = doc(db,"tasks",userId,"dates",d);
+  let snap = await getDoc(ref);
 
-let snap=await ref.get();
-let list=snap.data()?.list || [];
+  let list = snap.data()?.list || [];
 
-list.push(text);
+  list.push(text);
 
-await ref.set({list});
+  await setDoc(ref,{list});
 
-taskInput.value="";
-loadTasks();
+  taskInput.value = "";
+  loadTasks();
 }
 
-// DATE CHANGE
-date.onchange=loadTasks;
+/* DATE CHANGE */
+document.getElementById("date").addEventListener("change", loadTasks);
+
 </script>
 
 </body>
