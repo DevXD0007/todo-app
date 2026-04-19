@@ -2,22 +2,68 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>To Do</title>
+<title>To Do Pro</title>
+
+<style>
+body{
+font-family:sans-serif;
+background:linear-gradient(135deg,#0f2027,#2c5364);
+color:white;
+padding:20px;
+}
+
+.card{
+background:rgba(255,255,255,0.1);
+backdrop-filter:blur(15px);
+padding:15px;
+border-radius:15px;
+margin-bottom:15px;
+}
+
+input,button{
+padding:10px;
+margin:5px;
+border:none;
+border-radius:8px;
+}
+
+button{
+cursor:pointer;
+background:#4facfe;
+color:white;
+}
+
+.task{
+padding:10px;
+margin:5px 0;
+background:rgba(255,255,255,0.1);
+border-radius:8px;
+}
+</style>
 </head>
 
 <body>
 
-<h2>Login</h2>
+<div id="auth" class="card">
+<h3>Login / Signup</h3>
 <input id="email" placeholder="Email">
 <input id="password" type="password" placeholder="Password">
+<br>
 <button onclick="signup()">Sign Up</button>
 <button onclick="login()">Login</button>
+</div>
 
-<div id="app" style="display:none;">
-<h3>Add Task</h3>
-<input id="taskInput">
+<div id="app" style="display:none">
+
+<div class="card">
+<h2>📋 My Tasks</h2>
+<input id="taskInput" placeholder="Task">
 <button onclick="addTask()">Add</button>
+<button onclick="logout()">Logout</button>
+</div>
+
 <div id="tasks"></div>
+
 </div>
 
 <script type="module">
@@ -37,34 +83,61 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-let userId = null;
+let userId=null;
 
 /* AUTH */
-onAuthStateChanged(auth, user => {
-  if(user){
-    userId = user.uid;
-    document.getElementById("app").style.display = "block";
-  }
+onAuthStateChanged(auth,user=>{
+if(user){
+userId=user.uid;
+document.getElementById("auth").style.display="none";
+document.getElementById("app").style.display="block";
+loadTasks();
+}
 });
 
 /* FUNCTIONS */
-window.signup = () => {
-  createUserWithEmailAndPassword(auth, email.value, password.value)
-    .then(()=>alert("Signup success"))
-    .catch(e=>alert(e.message));
+window.signup=()=>{
+createUserWithEmailAndPassword(auth,email.value,password.value)
+.then(()=>alert("Signup success"))
+.catch(e=>alert(e.message));
 };
 
-window.login = () => {
-  signInWithEmailAndPassword(auth, email.value, password.value)
-    .then(()=>alert("Login success"))
-    .catch(e=>alert(e.message));
+window.login=()=>{
+signInWithEmailAndPassword(auth,email.value,password.value)
+.then(()=>alert("Login success"))
+.catch(e=>alert(e.message));
 };
 
-window.addTask = async () => {
-  let text = taskInput.value;
-  let ref = doc(db,"tasks",userId);
-  await setDoc(ref,{task:text});
-  tasks.innerText = text;
+window.logout=()=>{signOut(auth);location.reload();};
+
+/* LOAD */
+async function loadTasks(){
+let ref=doc(db,"tasks",userId);
+let snap=await getDoc(ref);
+
+let list=snap.data()?.list||[];
+
+tasks.innerHTML="";
+list.forEach(t=>{
+tasks.innerHTML+=`<div class="task">${t}</div>`;
+});
+}
+
+/* ADD */
+window.addTask=async()=>{
+let text=taskInput.value.trim();
+if(!text)return;
+
+let ref=doc(db,"tasks",userId);
+let snap=await getDoc(ref);
+
+let list=snap.data()?.list||[];
+list.push(text);
+
+await setDoc(ref,{list});
+
+taskInput.value="";
+loadTasks();
 };
 </script>
 
