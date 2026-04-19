@@ -2,29 +2,47 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>To Do Pro</title>
+<title>To Do Pro+</title>
 
 <style>
-body{
-font-family:sans-serif;
-background:linear-gradient(135deg,#0f2027,#2c5364);
-color:white;
-padding:20px;
+:root{
+--bg1:#0f2027;
+--bg2:#2c5364;
+--glass:rgba(255,255,255,0.08);
+--text:white;
 }
 
+.light{
+--bg1:#e3f2fd;
+--bg2:#ffffff;
+--glass:rgba(255,255,255,0.6);
+--text:#222;
+}
+
+body{
+font-family:sans-serif;
+background:linear-gradient(135deg,var(--bg1),var(--bg2));
+color:var(--text);
+padding:20px;
+transition:0.3s;
+}
+
+/* GLASS */
 .card{
-background:#1e2a38;
+background:var(--glass);
+backdrop-filter:blur(18px);
+border:1px solid rgba(255,255,255,0.2);
+border-radius:15px;
 padding:15px;
-border-radius:12px;
-margin-bottom:12px;
-box-shadow:0 4px 10px rgba(0,0,0,0.3);
+margin-bottom:15px;
+box-shadow:0 8px 30px rgba(0,0,0,0.2);
 }
 
 input,button{
 padding:10px;
 margin:5px;
 border:none;
-border-radius:8px;
+border-radius:10px;
 }
 
 button{
@@ -35,21 +53,30 @@ color:white;
 
 .task{
 display:flex;
-justify-content:space-between;
+align-items:center;
+gap:10px;
 padding:10px;
 margin:6px 0;
-background:#243447;
-border-radius:8px;
+border-radius:10px;
+background:rgba(255,255,255,0.1);
 cursor:grab;
 }
 
-.task.dragging{
-opacity:0.5;
+.task.completed{
+text-decoration:line-through;
+opacity:0.6;
 }
 
-.streak{
+.stats{
+display:flex;
+justify-content:space-between;
 font-size:14px;
-color:#00e676;
+margin-top:10px;
+}
+
+.toggle{
+float:right;
+cursor:pointer;
 }
 </style>
 </head>
@@ -68,14 +95,20 @@ color:#00e676;
 <div id="app" style="display:none">
 
 <div class="card">
-<h2>📋 To Do Pro</h2>
-
-<div class="streak" id="streak">🔥 Streak: 0 days</div>
+<h2>📋 To Do Pro+
+<span class="toggle" onclick="toggleTheme()">🌙</span>
+</h2>
 
 <input type="date" id="date">
 <input id="taskInput" placeholder="Task">
 <button onclick="addTask()">Add</button>
 <button onclick="logout()">Logout</button>
+
+<div class="stats">
+<div id="total">Total: 0</div>
+<div id="completed">Done: 0</div>
+<div id="streak">🔥 0</div>
+</div>
 </div>
 
 <div id="tasks"></div>
@@ -92,7 +125,7 @@ from "https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js";
 const firebaseConfig = {
   apiKey: "AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
   authDomain: "todo-app-b2da0.firebaseapp.com",
-  projectId: "todo-app-b2da0",
+  projectId: "todo-app-b2da0"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -107,13 +140,12 @@ onAuthStateChanged(auth,user=>{
 if(user){
 userId=user.uid;
 
-authDiv.style.display="none";
+auth.style.display="none";
 app.style.display="block";
 
 date.value=new Date().toISOString().split("T")[0];
 
 loadTasks();
-updateStreak();
 }
 });
 
@@ -122,7 +154,7 @@ window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value
 window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
 window.logout=()=>{signOut(auth);location.reload();};
 
-/* LOAD TASKS */
+/* LOAD */
 async function loadTasks(){
 let d=date.value;
 let ref=doc(db,"tasks",userId,"dates",d);
@@ -131,6 +163,8 @@ let snap=await getDoc(ref);
 currentTasks=snap.data()?.list||[];
 
 render();
+updateStats();
+updateStreak();
 }
 
 /* RENDER */
@@ -139,9 +173,13 @@ tasks.innerHTML="";
 
 currentTasks.forEach((t,i)=>{
 let div=document.createElement("div");
-div.className="task";
+div.className="task"+(t.done?" completed":"");
 div.draggable=true;
-div.innerText=t;
+
+div.innerHTML=`
+<input type="checkbox" ${t.done?"checked":""} onchange="toggleTask(${i})">
+<span>${t.text}</span>
+`;
 
 div.addEventListener("dragstart",()=>div.classList.add("dragging"));
 div.addEventListener("dragend",()=>{
@@ -152,6 +190,7 @@ saveOrder();
 tasks.appendChild(div);
 });
 
+/* DRAG */
 tasks.addEventListener("dragover",e=>{
 e.preventDefault();
 const dragging=document.querySelector(".dragging");
@@ -161,7 +200,6 @@ else tasks.insertBefore(dragging,after);
 });
 }
 
-/* DRAG LOGIC */
 function getAfter(container,y){
 const els=[...container.querySelectorAll(".task:not(.dragging)")];
 return els.reduce((closest,child)=>{
@@ -175,25 +213,46 @@ return{offset,element:child};
 
 /* SAVE ORDER */
 async function saveOrder(){
-let newList=[...tasks.children].map(el=>el.innerText);
+let newList=[...tasks.children].map(el=>{
+return{
+text:el.innerText,
+done:el.querySelector("input").checked
+};
+});
 currentTasks=newList;
-
 await setDoc(doc(db,"tasks",userId,"dates",date.value),{list:newList});
 }
 
-/* ADD TASK */
+/* ADD */
 window.addTask=async()=>{
 let text=taskInput.value.trim();
 if(!text)return;
 
-currentTasks.push(text);
+currentTasks.push({text,done:false});
 
 await setDoc(doc(db,"tasks",userId,"dates",date.value),{list:currentTasks});
 
 taskInput.value="";
 loadTasks();
-updateStreak();
 };
+
+/* TOGGLE */
+window.toggleTask=async(i)=>{
+currentTasks[i].done=!currentTasks[i].done;
+
+await setDoc(doc(db,"tasks",userId,"dates",date.value),{list:currentTasks});
+
+loadTasks();
+};
+
+/* STATS */
+function updateStats(){
+let total=currentTasks.length;
+let done=currentTasks.filter(t=>t.done).length;
+
+document.getElementById("total").innerText="Total: "+total;
+document.getElementById("completed").innerText="Done: "+done;
+}
 
 /* STREAK */
 async function updateStreak(){
@@ -212,8 +271,13 @@ streakCount++;
 }else break;
 }
 
-streak.innerText=`🔥 Streak: ${streakCount} days`;
+streak.innerText="🔥 "+streakCount;
 }
+
+/* THEME */
+window.toggleTheme=()=>{
+document.body.classList.toggle("light");
+};
 
 /* EVENTS */
 date.onchange=loadTasks;
