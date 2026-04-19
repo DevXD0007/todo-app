@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>To Do</title>
+</head>
+
+<body>
+
+<h2>Login</h2>
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<button onclick="signup()">Sign Up</button>
+<button onclick="login()">Login</button>
+
+<div id="app" style="display:none;">
+<h3>Add Task</h3>
+<input id="taskInput">
+<button onclick="addTask()">Add</button>
+<div id="tasks"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
+  authDomain: "todo-app-b2da0.firebaseapp.com",
+  projectId: "todo-app-b2da0"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let userId = null;
+
+/* AUTH */
+onAuthStateChanged(auth, user => {
+  if(user){
+    userId = user.uid;
+    document.getElementById("app").style.display = "block";
+  }
+});
+
+/* FUNCTIONS */
+window.signup = () => {
+  createUserWithEmailAndPassword(auth, email.value, password.value)
+    .then(()=>alert("Signup success"))
+    .catch(e=>alert(e.message));
+};
+
+window.login = () => {
+  signInWithEmailAndPassword(auth, email.value, password.value)
+    .then(()=>alert("Login success"))
+    .catch(e=>alert(e.message));
+};
+
+window.addTask = async () => {
+  let text = taskInput.value;
+  let ref = doc(db,"tasks",userId);
+  await setDoc(ref,{task:text});
+  tasks.innerText = text;
+};
+</script>
+
+</body>
+</html>
