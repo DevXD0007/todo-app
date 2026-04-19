@@ -1,156 +1,159 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>To Do List</title>
 
 <style>
 body{
 font-family:sans-serif;
-background:linear-gradient(135deg,#0f2027,#2c5364,#4facfe);
+background:#0f2027;
 color:white;
 padding:20px;
 }
 .box{
-background:rgba(255,255,255,0.1);
+background:#1e2a38;
 padding:15px;
-border-radius:15px;
+border-radius:10px;
 margin-bottom:15px;
 }
 input,button{
 padding:10px;
-border:none;
-border-radius:10px;
 margin:5px;
+border:none;
+border-radius:8px;
 }
-button{
-background:rgba(255,255,255,0.2);
-color:white;
-cursor:pointer;
-}
-.task{
-display:flex;
-justify-content:space-between;
-margin:5px 0;
-}
-.completed{
-text-decoration:line-through;
-opacity:0.6;
-}
+button{cursor:pointer;}
+.task{display:flex;justify-content:space-between;margin:5px 0;}
 </style>
 </head>
 
 <body>
 
+<div id="auth" class="box">
+<h3>Login / Signup</h3>
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<br>
+<button onclick="signup()">Sign Up</button>
+<button onclick="login()">Login</button>
+</div>
+
+<div id="app" style="display:none">
+
 <div class="box">
 <h2>📋 To Do List</h2>
-
 <input type="date" id="date">
-<input type="text" id="taskInput" placeholder="Task...">
+<input id="taskInput" placeholder="Task">
 <button onclick="addTask()">Add</button>
-<button onclick="exportCSV()">⬇ Excel</button>
+<button onclick="logout()">Logout</button>
 </div>
 
 <div id="tasks"></div>
 
-<script>
-let tasksData = JSON.parse(localStorage.getItem("tasks")) || {};
+</div>
 
-// INIT
-document.addEventListener("DOMContentLoaded", () => {
-    let today = new Date().toISOString().split("T")[0];
-    document.getElementById("date").value = today;
-    loadTasks();
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js"></script>
+
+<script>
+// 🔴 PASTE YOUR FIREBASE CONFIG HERE
+const firebaseConfig = {
+  apiKey: "YOUR_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let userId = null;
+
+// AUTH STATE
+auth.onAuthStateChanged(user=>{
+if(user){
+userId = user.uid;
+document.getElementById("auth").style.display="none";
+document.getElementById("app").style.display="block";
+
+document.getElementById("date").value =
+new Date().toISOString().split("T")[0];
+
+loadTasks();
+}
 });
 
-// SAVE
-function saveTasks(){
-    localStorage.setItem("tasks", JSON.stringify(tasksData));
+// SIGNUP
+function signup(){
+auth.createUserWithEmailAndPassword(email.value,password.value);
+}
+
+// LOGIN
+function login(){
+auth.signInWithEmailAndPassword(email.value,password.value);
+}
+
+// LOGOUT
+function logout(){
+auth.signOut();
+location.reload();
 }
 
 // LOAD
-function loadTasks(){
-    let d = document.getElementById("date").value;
+async function loadTasks(){
+let d=date.value;
 
-    if(!tasksData[d]) tasksData[d] = [];
+let snap=await db.collection("tasks")
+.doc(userId)
+.collection("dates")
+.doc(d)
+.get();
 
-    let html = "";
+let data=snap.data()?.list || [];
 
-    tasksData[d].forEach((t,i)=>{
-        html += `
-        <div class="box task ${t.done ? 'completed' : ''}">
-            <span onclick="toggleTask(${i})">${t.text}</span>
-            <button onclick="deleteTask(${i})">X</button>
-        </div>
-        `;
-    });
+render(data);
+}
 
-    document.getElementById("tasks").innerHTML = html;
-
-    if(tasksData[d].length === 0){
-        document.getElementById("tasks").innerHTML = "<div>No tasks ✨</div>";
-    }
+// RENDER
+function render(list){
+let html="";
+list.forEach((t,i)=>{
+html+=`
+<div class="box task">
+<span>${t}</span>
+</div>`;
+});
+tasks.innerHTML=html;
 }
 
 // ADD
-function addTask(){
-    let d = document.getElementById("date").value;
-    let text = document.getElementById("taskInput").value.trim();
+async function addTask(){
+let d=date.value;
+let text=taskInput.value.trim();
+if(!text)return;
 
-    if(!text) return;
+let ref=db.collection("tasks")
+.doc(userId)
+.collection("dates")
+.doc(d);
 
-    if(!tasksData[d]) tasksData[d] = [];
+let snap=await ref.get();
+let list=snap.data()?.list || [];
 
-    tasksData[d].push({text, done:false});
+list.push(text);
 
-    document.getElementById("taskInput").value = "";
+await ref.set({list});
 
-    saveTasks();
-    loadTasks();
+taskInput.value="";
+loadTasks();
 }
 
-// TOGGLE
-function toggleTask(i){
-    let d = document.getElementById("date").value;
-
-    tasksData[d][i].done = !tasksData[d][i].done;
-
-    saveTasks();
-    loadTasks();
-}
-
-// DELETE
-function deleteTask(i){
-    let d = document.getElementById("date").value;
-
-    tasksData[d].splice(i,1);
-
-    saveTasks();
-    loadTasks();
-}
-
-// EXPORT
-function exportCSV(){
-    let rows = [["Date","Task","Done"]];
-
-    Object.keys(tasksData).forEach(d=>{
-        tasksData[d].forEach(t=>{
-            rows.push([d, t.text, t.done ? "Yes":"No"]);
-        });
-    });
-
-    let csv = rows.map(r=>r.join(",")).join("\n");
-
-    let blob = new Blob([csv], {type:"text/csv"});
-    let a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "tasks.csv";
-    a.click();
-}
-
-// CHANGE DATE
-document.getElementById("date").addEventListener("change", loadTasks);
+// DATE CHANGE
+date.onchange=loadTasks;
 </script>
 
 </body>
