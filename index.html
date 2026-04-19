@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+<title>To Do Pro</title>
+
+<style>
+body{
+margin:0;
+font-family:-apple-system, BlinkMacSystemFont, sans-serif;
+background:linear-gradient(135deg,#0f2027,#2c5364);
+color:white;
+padding:15px;
+}
+
+.card{
+background:rgba(255,255,255,0.08);
+backdrop-filter:blur(20px);
+border-radius:20px;
+padding:15px;
+margin-bottom:15px;
+}
+
+input,button{
+border:none;
+border-radius:12px;
+padding:12px;
+margin:5px;
+}
+
+button{
+background:#4facfe;
+color:white;
+cursor:pointer;
+}
+
+.task{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:12px;
+margin:8px 0;
+border-radius:14px;
+background:rgba(255,255,255,0.1);
+cursor:grab;
+}
+
+.task.completed{
+text-decoration:line-through;
+opacity:0.6;
+}
+</style>
+</head>
+
+<body>
+
+<div id="auth" class="card">
+<h3>Login</h3>
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<br>
+<button onclick="signup()">Sign Up</button>
+<button onclick="login()">Login</button>
+</div>
+
+<div id="app" style="display:none">
+
+<div class="card">
+<h2>📋 Tasks</h2>
+<input id="taskInput" placeholder="New task">
+<button onclick="addTask()">Add</button>
+<button onclick="logout()">Logout</button>
+
+<div id="stats"></div>
+</div>
+
+<div class="card">
+<canvas id="chart"></canvas>
+</div>
+
+<div id="tasks"></div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBYBA-2Q4MroEkgSf2ezz7arLKdQpc8s4s",
+  authDomain: "todo-app-b2da0.firebaseapp.com",
+  projectId: "todo-app-b2da0"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+let userId=null;
+let tasks=[];
+let history={};
+
+onAuthStateChanged(auth,user=>{
+if(user){
+userId=user.uid;
+authDiv.style.display="none";
+appDiv.style.display="block";
+load();
+}
+});
+
+window.signup=()=>createUserWithEmailAndPassword(auth,email.value,password.value);
+window.login=()=>signInWithEmailAndPassword(auth,email.value,password.value);
+window.logout=()=>signOut(auth);
+
+/* LOAD */
+async function load(){
+let ref=doc(db,"tasks",userId);
+let snap=await getDoc(ref);
+
+let data=snap.data()||{};
+tasks=data.list||[];
+history=data.history||{};
+
+tasks=tasks.map(t=>typeof t==="string"?{text:t,done:false}:t);
+
+render();
+updateStats();
+updateChart();
+}
+
+/* RENDER */
+function render(){
+tasksDiv.innerHTML="";
+
+tasks.forEach((t,i)=>{
+let div=document.createElement("div");
+div.className="task"+(t.done?" completed":"");
+div.draggable=true;
+
+div.innerHTML=`
+<div>
+<input type="checkbox" ${t.done?"checked":""} onchange="toggleTask(${i})">
+${t.text}
+</div>
+<button onclick="deleteTask(${i})">❌</button>
+`;
+
+tasksDiv.appendChild(div);
+
+/* drag */
+div.addEventListener("dragstart",()=>div.classList.add("dragging"));
+div.addEventListener("dragend",()=>{
+div.classList.remove("dragging");
+save();
+});
+});
+
+tasksDiv.addEventListener("dragover",e=>{
+e.preventDefault();
+const dragging=document.querySelector(".dragging");
+const after=[...tasksDiv.children].find(el=>{
+return e.clientY <= el.getBoundingClientRect().top + el.offsetHeight/2;
+});
+tasksDiv.insertBefore(dragging,after);
+});
+}
+
+/* SAVE */
+async function save(){
+await setDoc(doc(db,"tasks",userId),{
+list:tasks,
+history:history
+});
+}
+
+/* ADD */
+window.addTask=async()=>{
+let text=taskInput.value.trim();
+if(!text)return;
+
+tasks.push({text,done:false});
+taskInput.value="";
+updateHistory();
+await save();
+render();
+};
+
+/* TOGGLE */
+window.toggleTask=async(i)=>{
+tasks[i].done=!tasks[i].done;
+updateHistory();
+await save();
+render();
+};
+
+/* DELETE */
+window.deleteTask=async(i)=>{
+tasks.splice(i,1);
+await save();
+render();
+};
+
+/* STREAK SYSTEM */
+function updateHistory(){
+let today=new Date().toISOString().slice(0,10);
+history[today]=tasks.filter(t=>t.done).length;
+}
+
+/* STATS */
+function updateStats(){
+let done=tasks.filter(t=>t.done).length;
+
+let streak=0;
+let d=new Date();
+
+for(let i=0;i<30;i++){
+let key=new Date(d.setDate(d.getDate()-1)).toISOString().slice(0,10);
+if(history[key]) streak++;
+else break;
+}
+
+document.getElementById("stats").innerHTML=
+`Done: ${done} | 🔥 Streak: ${streak}`;
+}
+
+/* CHART */
+function updateChart(){
+let labels=[];
+let data=[];
+let d=new Date();
+
+for(let i=6;i>=0;i--){
+let date=new Date();
+date.setDate(d.getDate()-i);
+let key=date.toISOString().slice(0,10);
+labels.push(key.slice(5));
+data.push(history[key]||0);
+}
+
+new Chart(chart,{
+type:"line",
+data:{
+labels:labels,
+datasets:[{label:"Done",data:data}]
+}
+});
+}
+
+/* DOM */
+const authDiv=document.getElementById("auth");
+const appDiv=document.getElementById("app");
+const tasksDiv=document.getElementById("tasks");
+</script>
+
+</body>
+</html>
